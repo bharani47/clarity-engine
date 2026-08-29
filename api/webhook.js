@@ -66,7 +66,7 @@ module.exports = async (req, res) => {
 
                     // UPGRADED: Pointing to gemini-2.5-flash and fixed camelCase syntax
                     const aiResponse = await axios.post(
-                        `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.7-flash:generateContent?key=${geminiKey}`,
+                        ``https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`,
                         {
                             contents: [{
                                 parts: [
