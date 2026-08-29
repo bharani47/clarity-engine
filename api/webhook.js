@@ -84,7 +84,6 @@ SEVERITY: [Minor/Moderate/Severe]`
                                 ]
                             }]
                         },
-                        { timeout: 8000 }
                     );
 
                     const generatedText = aiResponse.data.candidates?.[0]?.content?.parts?.[0]?.text;
