@@ -40,11 +40,7 @@ module.exports = async (req, res) => {
         // 2. IMAGE / PHOTO HANDLING (VISION ENGINE)
         // ==========================================
         else if (update.message.photo) {
-            // Send typing & initial status
-            await axios.post(`${TELEGRAM_API}/sendChatAction`, {
-                chat_id: chatId,
-                action: 'typing'
-            });
+            await axios.post(`${TELEGRAM_API}/sendChatAction`, { chat_id: chatId, action: 'typing' });
 
             await axios.post(`${TELEGRAM_API}/sendMessage`, {
                 chat_id: chatId,
@@ -52,42 +48,36 @@ module.exports = async (req, res) => {
                 parse_mode: 'Markdown'
             });
 
-            // Get the highest resolution photo file_id
             const photos = update.message.photo;
             const fileId = photos[photos.length - 1].file_id;
 
-            // Fetch file path from Telegram
             const fileRes = await axios.get(`${TELEGRAM_API}/getFile?file_id=${fileId}`);
             const filePath = fileRes.data.result.file_path;
             const imageUrl = `https://api.telegram.org/file/bot${token}/${filePath}`;
 
             let defectAnalysis = "Visible product defect / damage verified.";
-            let defectType = "Physical Product Damage";
-            let severity = "High (Eligible for instant replacement)";
 
-            // Call Vision AI if Gemini Key is configured
+            // Run Live Google AI Vision
             if (geminiKey) {
                 try {
-                    // Download image buffer for base64 conversion
                     const imgBuffer = await axios.get(imageUrl, { responseType: 'arraybuffer' });
                     const base64Image = Buffer.from(imgBuffer.data).toString('base64');
 
+                    // UPGRADED: Pointing to gemini-2.5-flash and fixed camelCase syntax
                     const aiResponse = await axios.post(
-                        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`,
+                        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiKey}`,
                         {
                             contents: [{
                                 parts: [
                                     {
-                                        text: `You are Clarity CX Autonomous Claim Verifier. Analyze this customer support image.
-Describe what item it is, whether it looks damaged/defective/worn, and state the defect type in 1 sentence.
-Format output strictly like:
+                                        text: `You are Clarity CX Autonomous Claim Verifier. Analyze this customer support image. Describe what item it is, whether it looks damaged/defective/worn, and state the defect type in 1 sentence. Format output strictly like:
 ITEM: [Item Name]
 DEFECT: [Defect description]
 SEVERITY: [Minor/Moderate/Severe]`
                                     },
                                     {
-                                        inline_data: {
-                                            mime_type: "image/jpeg",
+                                        inlineData: {
+                                            mimeType: "image/jpeg",
                                             data: base64Image
                                         }
                                     }
@@ -102,13 +92,12 @@ SEVERITY: [Minor/Moderate/Severe]`
                         defectAnalysis = generatedText;
                     }
                 } catch (aiErr) {
-                    console.error("AI API Call failed, falling back to heuristic engine:", aiErr.message);
+                    console.error("AI API Call failed:", aiErr.response?.data || aiErr.message);
                 }
             }
 
             const claimId = `CLM-${Math.floor(100000 + Math.random() * 900000)}`;
 
-            // Send Final Autonomous Resolution Message
             const resolutionMessage = 
 `✅ *CLAIM VERIFIED & RESOLVED (Zero-Touch)*
 ━━━━━━━━━━━━━━━━━━━━
