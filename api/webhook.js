@@ -1,4 +1,5 @@
 const axios = require('axios');
+const { MongoClient } = require('mongodb');
 
 module.exports = async (req, res) => {
     if (req.method !== 'POST') {
@@ -120,6 +121,26 @@ ${defectAnalysis}
 📄 *Prepaid Return Label:* [Download PDF Label](https://clarity-cx-engine.vercel.app/api/label?id=${claimId})
 ━━━━━━━━━━━━━━━━━━━━
 _Clarity CX Autonomous Resolution Engine_`;
+
+// --- MONGODB MUTATION ---
+try {
+    const client = new MongoClient(process.env.MONGODB_URI);
+    await client.connect();
+    const db = client.db('claritycx'); // Database name
+    const claims = db.collection('live_claims'); // Table name
+
+    await claims.insertOne({
+        id: claimId,
+        item: "Image Processed", 
+        defect: defectAnalysis,
+        severity: "Severe",
+        status: "Auto-Approved",
+        time: new Date().toISOString()
+    });
+    await client.close();
+} catch (dbErr) {
+    console.error("Database Write Failed:", dbErr.message);
+}
 
             await axios.post(`${TELEGRAM_API}/sendMessage`, {
                 chat_id: chatId,
