@@ -12,15 +12,13 @@ async function getDbClient(env) {
     return client;
 }
 
-// --- THE 6-API INDESTRUCTIBLE CASCADE ---
+// --- THE 6-API INDESTRUCTIBLE VISION CASCADE ---
 async function analyzeImageWithFallback(base64Image, sessionData, env) {
-    // 🧠 ENTERPRISE PROMPT: Cross-referencing user's story with the image!
     const prompt = `You are Clarity CX Autonomous Claim Verifier. The customer claims the following issue: "${sessionData.reason}". Analyze the image to verify if it matches their claim. State ITEM, DEFECT, and SEVERITY (Minor/Moderate/Severe) in 3 short lines.`;
     
     const imagePayload = { type: "image_url", image_url: { url: `data:image/jpeg;base64,${base64Image}` } };
     const mistralImagePayload = { type: "image_url", image_url: `data:image/jpeg;base64,${base64Image}` };
 
-    // 1. GROQ (Llama 3.2 90B Vision)
     if (env.GROQ_API_KEY) {
         try {
             const res = await axios.post("https://api.groq.com/openai/v1/chat/completions", {
@@ -31,7 +29,6 @@ async function analyzeImageWithFallback(base64Image, sessionData, env) {
         } catch (e) { console.error("Groq Failed, switching..."); }
     }
 
-    // 2. MISTRAL NATIVE (Pixtral 12B)
     if (env.MISRAL_API_KEY) { 
         try {
             const res = await axios.post("https://api.mistral.ai/v1/chat/completions", {
@@ -42,7 +39,6 @@ async function analyzeImageWithFallback(base64Image, sessionData, env) {
         } catch (e) { console.error("Mistral Failed, switching..."); }
     }
 
-    // 3. OPENROUTER (Llama 3.2 11B Vision)
     if (env.OPENROUTER_API_KEY) {
         try {
             const res = await axios.post("https://openrouter.ai/api/v1/chat/completions", {
@@ -53,7 +49,6 @@ async function analyzeImageWithFallback(base64Image, sessionData, env) {
         } catch (e) { console.error("OpenRouter Failed, switching..."); }
     }
 
-    // 4. CLOUDFLARE WORKERS AI (Llama 3.2 11B Vision)
     if (env.CLOUDFLARE_API_KEY && env.CLOUDFLARE_ACCOUNT_ID) {
         try {
             const res = await axios.post(`https://api.cloudflare.com/client/v4/accounts/${env.CLOUDFLARE_ACCOUNT_ID}/ai/v1/chat/completions`, {
@@ -64,7 +59,6 @@ async function analyzeImageWithFallback(base64Image, sessionData, env) {
         } catch (e) { console.error("Cloudflare Failed, switching..."); }
     }
 
-    // 5. GEMINI 3.7 FLASH (The Heavy Hitter)
     if (env.GEMINI_API_KEY) {
         try {
             const res = await axios.post(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.7-flash:generateContent?key=${env.GEMINI_API_KEY}`, {
@@ -74,7 +68,6 @@ async function analyzeImageWithFallback(base64Image, sessionData, env) {
         } catch (e) { console.error("Gemini 3.7 Overloaded, executing failover to 1.5..."); }
     }
 
-    // 6. GEMINI 1.5 FLASH (The Bulletproof Backup)
     if (env.GEMINI_API_KEY) {
         try {
             const res = await axios.post(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${env.GEMINI_API_KEY}`, {
@@ -122,8 +115,6 @@ async function processClaimInBackground(update, sessionData, env) {
         // ---------------------------------------------------------
 
         const base64Image = Buffer.from(imgBuffer.data).toString('base64');
-
-        // AI Cascade runs here
         const defectAnalysis = await analyzeImageWithFallback(base64Image, sessionData, env);
         const claimId = `CLM-${Math.floor(100000 + Math.random() * 900000)}`;
         
@@ -142,7 +133,7 @@ async function processClaimInBackground(update, sessionData, env) {
             defect: defectAnalysis,
             severity: severityLabel,
             status: statusLabel,
-            imageHash: imageHash, // Saves the hash to prevent future duplicates!
+            imageHash: imageHash,
             time: new Date().toISOString()
         });
 
@@ -154,7 +145,6 @@ async function processClaimInBackground(update, sessionData, env) {
             responseText = `⚠️ *HUMAN-IN-THE-LOOP TRIGGERED*\n━━━━━━━━━━━━━━━━━━━━\n🆔 *Claim ID:* \`${claimId}\`\n📋 *Status:* \`ESCALATED TO ADJUSTER\`\n\n🔍 *AI Vision Assessment:*\n${defectAnalysis}\n\n*System Note:* The AI determined this damage is borderline. Your claim has been safely paused and routed to a human adjuster for manual review on the Command Center.\n━━━━━━━━━━━━━━━━━━━━\n_Clarity CX Routing Engine_`;
         }
 
-        // Deliver Receipt to Customer
         await axios.post(`${TELEGRAM_API}/sendMessage`, {
             chat_id: chatId,
             text: responseText,
@@ -195,7 +185,6 @@ module.exports = async (req, res) => {
             return res.status(200).send('OK');
         }
 
-        // If user sends message without active session
         if (!session) {
             await sessions.updateOne({ chatId }, { $set: { step: 'AWAITING_EMAIL' } }, { upsert: true });
             await axios.post(`${TELEGRAM_API}/sendMessage`, {
@@ -220,7 +209,6 @@ module.exports = async (req, res) => {
         else if (session.step === 'AWAITING_ORDER_ID') {
             if (!userText) return res.status(200).send('OK');
             
-            // The 10 Whitelisted Demo Order IDs
             const validOrders = [
                 "ORD-99210", "ORD-24100", "ORD-11111", "ORD-22222", "ORD-33333", 
                 "ORD-44444", "ORD-55555", "ORD-66666", "ORD-77777", "ORD-88888"
@@ -228,17 +216,15 @@ module.exports = async (req, res) => {
 
             const normalizedInput = userText.trim().toUpperCase();
 
-            // Check if the order exists in our "Database"
             if (!validOrders.includes(normalizedInput)) {
                 await axios.post(`${TELEGRAM_API}/sendMessage`, { 
                     chat_id: chatId, 
                     text: `⚠️ *CRM Verification Failed*\n\nThe ID \`${userText}\` does not exist in our purchase records. Please verify your invoice and try again.`, 
                     parse_mode: 'Markdown' 
                 });
-                return res.status(200).send('OK'); // Keeps them locked in this step
+                return res.status(200).send('OK'); 
             }
             
-            // If valid, move to the next step
             await sessions.updateOne({ chatId }, { $set: { step: 'AWAITING_REASON', orderId: normalizedInput } });
             await axios.post(`${TELEGRAM_API}/sendMessage`, { 
                 chat_id: chatId, 
@@ -247,38 +233,58 @@ module.exports = async (req, res) => {
             });
         }
 
-        // 4. STEP THREE: REASON FOR DAMAGE (Multilingual Auto-Translate)
+        // 4. STEP THREE: REASON FOR DAMAGE (Translation Cascade)
         else if (session.step === 'AWAITING_REASON') {
             if (!userText) return res.status(200).send('OK');
             
             let finalReason = userText;
             let translationNotice = "";
+            let translatedText = "";
 
-            // --- HACKATHON NUKE: Instant Groq Translation Intercept ---
+            const systemPrompt = "You are an enterprise translation engine. Translate the user text to clear English. If it is already in English, return it exactly as is. Return ONLY the English text, no extra words, no quotes.";
+
             try {
-                if (process.env.GROQ_API_KEY) {
-                    const transRes = await axios.post("https://api.groq.com/openai/v1/chat/completions", {
-                        model: "llama3-8b-8192",
-                        messages: [
-                            { role: "system", content: "You are an enterprise translation engine. Translate the user text to clear English. If it is already in English, return it exactly as is. Return ONLY the English text, no extra words, no quotes." },
-                            { role: "user", content: userText }
-                        ]
-                    }, { headers: { "Authorization": `Bearer ${process.env.GROQ_API_KEY}` }, timeout: 4000 });
-                    
-                    const translatedText = transRes.data.choices[0].message.content.trim();
-                    
-                    // If translated, append the notice
-                    if (translatedText && translatedText.toLowerCase() !== userText.toLowerCase()) {
-                        finalReason = translatedText;
-                        translationNotice = `\n*(Auto-translated to: "${finalReason}")*`;
-                    }
+                // Try 1: Groq
+                if (process.env.GROQ_API_KEY && !translatedText) {
+                    try {
+                        const res = await axios.post("https://api.groq.com/openai/v1/chat/completions", {
+                            model: "llama-3.1-8b-instant", 
+                            messages: [{ role: "system", content: systemPrompt }, { role: "user", content: userText }]
+                        }, { headers: { "Authorization": `Bearer ${process.env.GROQ_API_KEY}` }, timeout: 4000 });
+                        translatedText = res.data.choices[0].message.content.trim();
+                    } catch (e) { console.error("Groq Translation Failed, switching to OpenRouter..."); }
                 }
-            } catch (e) {
-                console.error("Translation API skipped/failed.", e.message);
+
+                // Try 2: OpenRouter
+                if (process.env.OPENROUTER_API_KEY && !translatedText) {
+                    try {
+                        const res = await axios.post("https://openrouter.ai/api/v1/chat/completions", {
+                            model: "meta-llama/llama-3.1-8b-instruct:free",
+                            messages: [{ role: "system", content: systemPrompt }, { role: "user", content: userText }]
+                        }, { headers: { "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}` }, timeout: 4000 });
+                        translatedText = res.data.choices[0].message.content.trim();
+                    } catch (e) { console.error("OpenRouter Translation Failed, switching to Mistral..."); }
+                }
+
+                // Try 3: Mistral
+                if (process.env.MISRAL_API_KEY && !translatedText) {
+                    try {
+                        const res = await axios.post("https://api.mistral.ai/v1/chat/completions", {
+                            model: "open-mistral-nemo",
+                            messages: [{ role: "system", content: systemPrompt }, { role: "user", content: userText }]
+                        }, { headers: { "Authorization": `Bearer ${process.env.MISRAL_API_KEY}` }, timeout: 4000 });
+                        translatedText = res.data.choices[0].message.content.trim();
+                    } catch (e) { console.error("Mistral Translation Failed."); }
+                }
+
+                if (translatedText && translatedText.toLowerCase() !== userText.toLowerCase()) {
+                    finalReason = translatedText;
+                    translationNotice = `\n*(Auto-translated to: "${finalReason}")*`;
+                }
+            } catch (globalError) {
+                console.error("All Translation APIs failed.", globalError.message);
             }
-            // ---------------------------------------------------------
-            
-            // Save both the English reason (for Vision AI) and original (for logs)
+
             await sessions.updateOne({ chatId }, { $set: { step: 'AWAITING_PHOTO', reason: finalReason, originalLanguage: userText } });
             
             await axios.post(`${TELEGRAM_API}/sendMessage`, { 
@@ -293,15 +299,12 @@ module.exports = async (req, res) => {
                 return res.status(200).send('OK');
             }
 
-            // Immediately acknowledge receipt
             await axios.post(`${TELEGRAM_API}/sendMessage`, {
                 chat_id: chatId, text: `⚡ *Assets received.* Cross-referencing your description with visual evidence... (This may take up to 20 seconds)`, parse_mode: 'Markdown'
             });
 
-            // Hand off to background worker so Vercel doesn't kill the process
             waitUntil(processClaimInBackground(update, session, process.env));
             
-            // Clear the session so they can start a new claim later
             await sessions.deleteOne({ chatId });
         }
 
