@@ -100,20 +100,38 @@ async function processClaimInBackground(update, sessionData, env) {
         const imageUrl = `https://api.telegram.org/file/bot${token}/${fileRes.data.result.file_path}`;
 
         const imgBuffer = await axios.get(imageUrl, { responseType: 'arraybuffer' });
+        
+        // --- 🚨 HACKATHON NUKE: Cryptographic Fraud Prevention ---
+        const crypto = require('crypto');
+        const imageHash = crypto.createHash('sha256').update(imgBuffer.data).digest('hex');
+        
+        const client = await getDbClient(env);
+        const db = client.db('claritycx');
+
+        // Check if this exact image hash already exists in the database
+        const existingClaim = await db.collection('live_claims').findOne({ imageHash: imageHash });
+        
+        if (existingClaim) {
+            await axios.post(`${TELEGRAM_API}/sendMessage`, {
+                chat_id: chatId,
+                text: `🚨 *SECURITY ALERT: DUPLICATE ASSET DETECTED*\n━━━━━━━━━━━━━━━━━━━━\n⚠️ *Fraud Prevention Triggered*\n\nOur hash-matching engine detected that this exact image file was already submitted under Claim ID: \`${existingClaim.id}\`.\n\nYour session has been locked and flagged for manual security review.\n━━━━━━━━━━━━━━━━━━━━\n_Clarity CX Security Engine_`,
+                parse_mode: 'Markdown'
+            });
+            return; // KILLS THE PIPELINE. Does not waste AI inference costs.
+        }
+        // ---------------------------------------------------------
+
         const base64Image = Buffer.from(imgBuffer.data).toString('base64');
 
         // AI Cascade runs here
         const defectAnalysis = await analyzeImageWithFallback(base64Image, sessionData, env);
         const claimId = `CLM-${Math.floor(100000 + Math.random() * 900000)}`;
         
-        // HACKATHON NUKE: Human-in-the-Loop Logic
         const isSevere = defectAnalysis.toLowerCase().includes('severe');
         const statusLabel = isSevere ? "Auto-Approved" : "Manual Review";
         const severityLabel = isSevere ? "Severe" : "Moderate/Borderline";
 
-        // Write Final Data to MongoDB for the Aura farming command center
-        const client = await getDbClient(env);
-        const db = client.db('claritycx');
+        // Write Final Data to MongoDB (NOW SAVING THE HASH)
         await db.collection('live_claims').insertOne({
             id: claimId,
             email: sessionData.email,
@@ -124,6 +142,7 @@ async function processClaimInBackground(update, sessionData, env) {
             defect: defectAnalysis,
             severity: severityLabel,
             status: statusLabel,
+            imageHash: imageHash, // Saves the hash to prevent future duplicates!
             time: new Date().toISOString()
         });
 
