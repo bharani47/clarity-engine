@@ -195,13 +195,38 @@ module.exports = async (req, res) => {
             });
         }
 
-        // 4. STEP THREE: REASON FOR DAMAGE
+        // 4. STEP THREE: REASON FOR DAMAGE (Multilingual Auto-Translate)
         else if (session.step === 'AWAITING_REASON') {
             if (!userText) return res.status(200).send('OK');
             
-            await sessions.updateOne({ chatId }, { $set: { step: 'AWAITING_PHOTO', reason: userText } });
+            let finalReason = userText;
+            let translationNotice = "";
+
+            // --- HACKATHON NUKE: Instant LLM Translation Intercept ---
+            try {
+                if (process.env.GEMINI_API_KEY) {
+                    const transRes = await axios.post(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`, {
+                        contents: [{ parts: [{ text: `You are an enterprise translation engine. Translate the following text to clear English. If it is already in English, return it exactly as is. Return ONLY the English text, no extra words. Text: "${userText}"` }] }]
+                    }, { timeout: 4000 });
+                    
+                    const translatedText = transRes.data.candidates[0].content.parts[0].text.trim();
+                    
+                    // If it translated something, append a notice for the Telegram UI
+                    if (translatedText.toLowerCase() !== userText.toLowerCase()) {
+                        finalReason = translatedText;
+                        translationNotice = `\n*(Auto-translated to: "${finalReason}")*`;
+                    }
+                }
+            } catch (e) {
+                console.error("Translation API skipped/failed.", e);
+            }
+            // ---------------------------------------------------------
+            
+            // Save both the English reason (for Vision AI) and original (for logs)
+            await sessions.updateOne({ chatId }, { $set: { step: 'AWAITING_PHOTO', reason: finalReason, originalLanguage: userText } });
+            
             await axios.post(`${TELEGRAM_API}/sendMessage`, { 
-                chat_id: chatId, text: `✅ Reason recorded.\n\n📸 Finally, please upload a **clear photo** showing the damage so our Vision AI can verify your claim.`, parse_mode: 'Markdown' 
+                chat_id: chatId, text: `✅ Reason recorded.${translationNotice}\n\n📸 Finally, please upload a **clear photo** showing the damage so our Vision AI can verify your claim.`, parse_mode: 'Markdown' 
             });
         }
         
