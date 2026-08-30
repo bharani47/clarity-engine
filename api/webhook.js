@@ -235,23 +235,27 @@ module.exports = async (req, res) => {
             let finalReason = userText;
             let translationNotice = "";
 
-            // --- HACKATHON NUKE: Instant LLM Translation Intercept ---
+            // --- HACKATHON NUKE: Instant Groq Translation Intercept ---
             try {
-                if (process.env.GEMINI_API_KEY) {
-                    const transRes = await axios.post(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`, {
-                        contents: [{ parts: [{ text: `You are an enterprise translation engine. Translate the following text to clear English. If it is already in English, return it exactly as is. Return ONLY the English text, no extra words. Text: "${userText}"` }] }]
-                    }, { timeout: 4000 });
+                if (process.env.GROQ_API_KEY) {
+                    const transRes = await axios.post("https://api.groq.com/openai/v1/chat/completions", {
+                        model: "llama3-8b-8192",
+                        messages: [
+                            { role: "system", content: "You are an enterprise translation engine. Translate the user text to clear English. If it is already in English, return it exactly as is. Return ONLY the English text, no extra words, no quotes." },
+                            { role: "user", content: userText }
+                        ]
+                    }, { headers: { "Authorization": `Bearer ${process.env.GROQ_API_KEY}` }, timeout: 4000 });
                     
-                    const translatedText = transRes.data.candidates[0].content.parts[0].text.trim();
+                    const translatedText = transRes.data.choices[0].message.content.trim();
                     
-                    // If it translated something, append a notice for the Telegram UI
-                    if (translatedText.toLowerCase() !== userText.toLowerCase()) {
+                    // If translated, append the notice
+                    if (translatedText && translatedText.toLowerCase() !== userText.toLowerCase()) {
                         finalReason = translatedText;
                         translationNotice = `\n*(Auto-translated to: "${finalReason}")*`;
                     }
                 }
             } catch (e) {
-                console.error("Translation API skipped/failed.", e);
+                console.error("Translation API skipped/failed.", e.message);
             }
             // ---------------------------------------------------------
             
