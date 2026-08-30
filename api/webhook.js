@@ -102,13 +102,16 @@ async function processClaimInBackground(update, sessionData, env) {
         const imgBuffer = await axios.get(imageUrl, { responseType: 'arraybuffer' });
         const base64Image = Buffer.from(imgBuffer.data).toString('base64');
 
-        // Pass the sessionData so the AI knows the user's claimed reason
+        // AI Cascade runs here
         const defectAnalysis = await analyzeImageWithFallback(base64Image, sessionData, env);
         const claimId = `CLM-${Math.floor(100000 + Math.random() * 900000)}`;
+        
+        // HACKATHON NUKE: Human-in-the-Loop Logic
         const isSevere = defectAnalysis.toLowerCase().includes('severe');
         const statusLabel = isSevere ? "Auto-Approved" : "Manual Review";
+        const severityLabel = isSevere ? "Severe" : "Moderate/Borderline";
 
-        // Write Final Data to MongoDB (Perfect for Aura farming dashboard)
+        // Write Final Data to MongoDB for the Aura farming command center
         const client = await getDbClient(env);
         const db = client.db('claritycx');
         await db.collection('live_claims').insertOne({
@@ -116,17 +119,26 @@ async function processClaimInBackground(update, sessionData, env) {
             email: sessionData.email,
             orderId: sessionData.orderId,
             userReason: sessionData.reason,
+            originalLanguage: sessionData.originalLanguage || null,
             item: "Image Processed", 
             defect: defectAnalysis,
-            severity: isSevere ? "Severe" : "Moderate",
+            severity: severityLabel,
             status: statusLabel,
             time: new Date().toISOString()
         });
 
-        // Deliver Complete Receipt to Customer
+        // HITL DYNAMIC TELEGRAM RECEIPT
+        let responseText = "";
+        if (isSevere) {
+            responseText = `✅ *WARRANTY CLAIM VERIFIED*\n━━━━━━━━━━━━━━━━━━━━\n🆔 *Claim ID:* \`${claimId}\`\n📧 *Email:* \`${sessionData.email}\`\n📦 *Order ID:* \`${sessionData.orderId}\`\n📋 *Status:* \`AUTO-APPROVED\`\n\n🔍 *Vision Verification:*\n${defectAnalysis}\n━━━━━━━━━━━━━━━━━━━━\n_Clarity CX Autonomous Engine_`;
+        } else {
+            responseText = `⚠️ *HUMAN-IN-THE-LOOP TRIGGERED*\n━━━━━━━━━━━━━━━━━━━━\n🆔 *Claim ID:* \`${claimId}\`\n📋 *Status:* \`ESCALATED TO ADJUSTER\`\n\n🔍 *AI Vision Assessment:*\n${defectAnalysis}\n\n*System Note:* The AI determined this damage is borderline. Your claim has been safely paused and routed to a human adjuster for manual review on the Command Center.\n━━━━━━━━━━━━━━━━━━━━\n_Clarity CX Routing Engine_`;
+        }
+
+        // Deliver Receipt to Customer
         await axios.post(`${TELEGRAM_API}/sendMessage`, {
             chat_id: chatId,
-            text: `✅ *WARRANTY CLAIM VERIFIED*\n━━━━━━━━━━━━━━━━━━━━\n🆔 *Claim ID:* \`${claimId}\`\n📧 *Email:* \`${sessionData.email}\`\n📦 *Order ID:* \`${sessionData.orderId}\`\n💬 *Stated Issue:* \`${sessionData.reason}\`\n📋 *Status:* \`${statusLabel.toUpperCase()}\`\n\n🔍 *Vision Verification:*\n${defectAnalysis}\n━━━━━━━━━━━━━━━━━━━━\n_Clarity CX Autonomous Engine_`,
+            text: responseText,
             parse_mode: 'Markdown'
         });
     } catch (err) {
