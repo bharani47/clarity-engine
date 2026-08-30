@@ -197,13 +197,34 @@ module.exports = async (req, res) => {
             });
         } 
         
-        // 3. STEP TWO: ORDER ID VALIDATION
+        // 3. STEP TWO: ORDER ID VALIDATION (Enterprise CRM Mock)
         else if (session.step === 'AWAITING_ORDER_ID') {
             if (!userText) return res.status(200).send('OK');
             
-            await sessions.updateOne({ chatId }, { $set: { step: 'AWAITING_REASON', orderId: userText } });
+            // The 10 Whitelisted Demo Order IDs
+            const validOrders = [
+                "ORD-99210", "ORD-24100", "ORD-11111", "ORD-22222", "ORD-33333", 
+                "ORD-44444", "ORD-55555", "ORD-66666", "ORD-77777", "ORD-88888"
+            ];
+
+            const normalizedInput = userText.trim().toUpperCase();
+
+            // Check if the order exists in our "Database"
+            if (!validOrders.includes(normalizedInput)) {
+                await axios.post(`${TELEGRAM_API}/sendMessage`, { 
+                    chat_id: chatId, 
+                    text: `⚠️ *CRM Verification Failed*\n\nThe ID \`${userText}\` does not exist in our purchase records. Please verify your invoice and try again.`, 
+                    parse_mode: 'Markdown' 
+                });
+                return res.status(200).send('OK'); // Keeps them locked in this step
+            }
+            
+            // If valid, move to the next step
+            await sessions.updateOne({ chatId }, { $set: { step: 'AWAITING_REASON', orderId: normalizedInput } });
             await axios.post(`${TELEGRAM_API}/sendMessage`, { 
-                chat_id: chatId, text: `✅ Order ID verified: \`${userText}\`\n\n💬 **What happened to the product?**\n(Please describe the damage or issue briefly).`, parse_mode: 'Markdown' 
+                chat_id: chatId, 
+                text: `✅ Order ID verified: \`${normalizedInput}\`\n\n💬 **What happened to the product?**\n(Please describe the damage or issue briefly).`, 
+                parse_mode: 'Markdown' 
             });
         }
 
